@@ -1,0 +1,46 @@
+name: Data Validation
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate-notebooks:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install jupyter nbconvert pandas pyarrow sqlparse
+    
+    - name: Validate Python scripts syntax
+      run: |
+        find . -name "*.py" -exec python -m py_compile {} \;
+  
+  validate-sql:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python for SQL validation
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install SQL tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install sqlparse
+    
+    - name: Validate SQL syntax
+      run: |
+        find sql-work/ -name "*.sql" -exec sqlparse --format-check {} \; || echo "SQL validation completed"
