@@ -1,0 +1,265 @@
+# Shipment Timeline Project Session Summary
+
+## Overview
+
+This session focused on creating a comprehensive data model for tracking package shipments through multiple systems using a timeline-based approach in Redshift. The primary goal was to develop a consolidated view that brings together data from SLAM (Sort, Label, and Manifest), GMP (Global Marketplace Platform), and PSE (Package Systems Events) into a unified timeline structure.
+
+## Key Design Decisions
+
+### UNION ALL Approach
+Instead of joining the three source tables on common keys (which would place related events on the same row), we implemented a UNION ALL approach that:
+- Maintains each event as a separate row
+- Preserves chronological ordering of events
+- Enables timeline-based analysis across systems
+- Follows the pattern used in waterfall_reference.sql
+
+### Data Filtering Strategy
+We implemented filtering to ensure we only analyze volume included in the slam_leg table:
+- GMP records are filtered to only include those with matching shipment_key in slam_leg
+- PSE records are filtered to only include those with matching tracking_id in GMP that also matches slam_leg
+- This ensures consistent volume analysis across all three systems
+
+### Common Key Structure
+- `pk`: Common identifier (shipment_key or tracking_id) to track packages across systems
+- `source_table`: Identifies which system the event came from ('slam_leg', 'GMP', or 'PSE')
+- `event_timestamp`: Normalized timestamp for chronological ordering
+- `shipment_id`, `package_id`, `tracking_id`, `dw_created_time`: Normalized across sources
+- Preserved pse.package_id as a separate field (pse_package_id) to maintain system-specific IDs
+
+### Optimization
+- `SORTKEY(pk, event_timestamp)`: Optimizes for queries filtering by package and ordering by time
+- `DISTKEY(pk)`: Distributes data efficiently across Redshift nodes
+
+## SQL Implementation Highlights
+
+### Consolidated Table Creation
+```sql
+CREATE TEMP TABLE consolidated SORTKEY(pk, event_timestamp) DISTKEY(pk) AS (
+    -- SLAM_LEG events
+    SELECT ... FROM slam_leg
+    
+    UNION ALL
+    
+    -- GMP events - filtered to match slam_leg
+    SELECT ... FROM gmp
+    WHERE EXISTS (
+        SELECT 1 FROM slam_leg sl
+        WHERE sl.shipment_key = g.shipment_key
+    )
+    
+    UNION ALL
+    
+    -- PSE events - filtered to match GMP that matches slam_leg
+    SELECT ... FROM pse
+    WHERE EXISTS (
+        SELECT 1 FROM gmp g
+        JOIN slam_leg sl ON sl.shipment_key = g.shipment_key
+        WHERE g.tracking_id = p.forward_tracking_id
+    )
+);
+```
+
+### Example Analytical Queries
+We created example queries demonstrating how to:
+1. Generate chronological event timelines for packages
+2. Calculate event counts by source system
+3. Find packages with delivery events
+4. Analyze shipment status progression
+5. Calculate time between key status transitions
+
+## Decisions Regarding Window Functions
+
+We considered implementing window functions similar to waterfall_reference.sql:
+```sql
+LAST_VALUE(ST."zone") IGNORE NULLS OVER(PARTITION BY ST.pk ORDER BY ST.event_timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS latest_slammed_zone
+```
+
+However, we decided not to include these window functions in the initial implementation:
+- For simplicity and clarity of the base data model
+- These can be added in future versions or directly in analytical queries as needed
+- Status identification is now handled using CASE statements in queries
+
+## UNION ALL vs JOIN Comparison
+
+We evaluated both approaches:
+
+### UNION ALL (Implemented)
+- **Structure**: Events as separate rows, stacked vertically
+- **Advantages**: Better for timeline analysis, status transitions, chronological order
+- **Considerations**: More rows with sparse data (many NULL fields)
+
+### JOIN (Alternative)
+- **Structure**: Events combined into wide rows with many columns
+- **Advantages**: Better for retrieving all information in a single row
+- **Considerations**: More complex to analyze event sequences, potential duplicate events
+
+## Future Enhancements
+
+Potential improvements for future iterations:
+1. Add window functions for latest values across events if needed
+2. Create tertiary_status classification to normalize status across systems
+3. Implement delivery tracking with was_delivered flag
+4. Add primary/secondary status classification based on tertiary_status
+5. Consider partition pruning strategies for large datasets
+6. Explore materialized views for common analytics patterns
+
+# Redshift Querying via Bedrock Knowledge Base
+
+## Query Method
+
+To query Redshift data using the AWS Bedrock knowledge base:
+
+1. Use the `aws bedrock-agent-runtime retrieve` command
+2. Format queries as JSON files with the `text` field containing the natural language question
+3. Create the JSON file with proper escaping: `echo '{"text": "your query here"}' > query.json`
+4. Submit the query using: `aws bedrock-agent-runtime retrieve --knowledge-base-id RD2ZPKUAUT --retrieval-query file://query.json`
+5. The knowledge base ID for Redshift is `RD2ZPKUAUT`
+
+## Example Query
+
+```bash
+# Create the query file
+echo '{"text": "show all tables in the database"}' > query.json
+
+# Submit the query to Bedrock
+aws bedrock-agent-runtime retrieve --knowledge-base-id RD2ZPKUAUT --retrieval-query file://query.json
+```
+
+This approach allows for natural language queries to be translated into SQL and executed against the Redshift database.
+
+# Container Planning Analysis Guidelines
+
+## Project Overview
+
+This project extends the shipment timeline analysis to include container planning data, providing insights into planning vs. execution at delivery stations. Key components include:
+
+1. **Container Planning Data**: Analysis of planning effectiveness, induction, and stowing at delivery stations
+2. **Location-Aware Analysis**: Using timezone information for proper cross-region comparisons
+3. **Integration with Shipment Timeline**: Merging container planning events with the core timeline model
+
+## Data Sources
+
+1. **Core Timeline Tables**:
+   - `amzlcore.d_shipment_timeline` - Consolidated timeline events
+   - `amzlcore.d_container_planning_events` - Container planning data
+   
+2. **Reference Data**:
+   - `amzlanalytics.perfectmile.d_perfectmile_node_mapping_mdm` - Node location mapping
+
+3. **Source System Tables**:
+   - `gmp_shipment_events_na` - Shipment tracking events with status codes
+   - `induct_events_na` - Package induction events
+   - `o_slam_packages_leg_live` - Shipment leg details
+   - `o_slam_packages_live` - Package shipment details
+   - `package_systems_event_na` - Package event tracking
+   - Parquet data in `s3://altdatasetexfil/claudecloud/routing2_container_snip/`
+
+## Analysis Approach
+
+When analyzing historical data:
+
+1. **Always Use Location Mapping**:
+   - Create the `amzl_mapping` temporary table first
+   - Convert all timestamps to local time using `CONVERT_TIMEZONE('UTC', timezone, timestamp)`
+   - Compare metrics within the same timezone context
+
+2. **Timeline Analysis Best Practices**:
+   - Use the consolidated timeline model with UNION ALL for chronological event ordering
+   - Maintain common identifiers (tracking_id, shipment_key) across all systems
+   - Preserve source system identification in the merged timeline
+
+3. **Container Planning Analysis**:
+   - Examine planning vs. execution effectiveness
+   - Analyze timing patterns between planning, induction, and stowing
+   - Compare performance across stations, originating nodes, and regions
+
+## Common SQL Patterns
+
+1. **Location-Aware Time Conversion**:
+```sql
+SELECT
+    tracking_id,
+    station_code,
+    CONVERT_TIMEZONE('UTC', map.timezone, event_timestamp) AS local_event_time
+FROM
+    event_table e
+JOIN
+    amzl_mapping map ON e.station_code = map.node
+```
+
+2. **Cross-System Timeline Aggregation**:
+```sql
+WITH timeline_base AS (
+    -- Base shipment timeline from consolidated timeline table
+    SELECT 
+        tracking_id,
+        shipment_key,
+        status_code,
+        status_time,
+        source
+    FROM 
+        amzlcore.d_shipment_timeline
+),
+container_events AS (
+    -- Container planning events in timeline format
+    SELECT
+        tracking_id,
+        shipment_id AS shipment_key,
+        'CONTAINER_' || event_type AS status_code,
+        event_timestamp AS status_time,
+        'CONTAINER_PLANNING' AS source
+    FROM 
+        container_events_source
+)
+SELECT * FROM timeline_base
+UNION ALL
+SELECT * FROM container_events
+ORDER BY tracking_id, status_time
+```
+
+3. **Planning Effectiveness Measurement**:
+```sql
+SELECT
+    station_code,
+    COUNT(*) AS total_packages,
+    SUM(is_planned) AS planned_packages,
+    SUM(is_inducted) AS inducted_packages,
+    SUM(is_inducted_as_planned) AS inducted_as_planned,
+    SUM(is_planned)::FLOAT / COUNT(*) * 100 AS planning_rate
+FROM
+    planning_data
+GROUP BY
+    station_code
+```
+
+## File Locations
+
+- Container planning analysis scripts: `/home/admsia/shipment_timeline/container_planning/analysis/`
+- Sample SQL queries: `/home/admsia/shipment_timeline/no_cycle/container_planning_sample_queries.sql`
+- Jupyter notebook for visualization: `/home/admsia/shipment_timeline/container_planning/analysis/container_analysis.ipynb`
+- Parquet data: `s3://altdatasetexfil/claudecloud/routing2_container_snip/`
+
+## Performance Optimization
+
+1. **Use appropriate DISTKEY and SORTKEY** - Already configured for optimal query performance
+2. **Create materialized views** for frequently accessed metrics
+3. **Apply proper filtering** before joining large tables
+4. **Use date partitioning** when analyzing specific time periods
+
+## Station Comparison Insights
+
+Initial analysis revealed significant differences between stations:
+
+1. **DAU1 (June 3, 2025)**:
+   - 100% planned packages
+   - 95% inducted as planned
+   - 6 originating nodes
+   - Consistent processing patterns
+
+2. **DJT6 (June 2, 2025)**:
+   - 61% planned packages
+   - 56% inducted as planned
+   - 13 originating nodes
+   - Higher variance in timing
+
+These differences suggest opportunities for cross-station learning and process standardization.
