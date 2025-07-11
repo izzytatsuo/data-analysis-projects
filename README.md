@@ -46,6 +46,14 @@ Utility scripts and tools:
 - File operation tools
 - Reusable analysis components
 
+### `/shipment-timeline-workflow/`
+**NEW**: Interactive workflow visualization and development project:
+- **Visual explanation** of incremental data processing pipeline
+- **Complete implementation** with SQL and Python orchestration
+- **Interactive diagrams** showing two-stage processing pattern
+- **Demo capabilities** with sample data generation
+- **Architecture documentation** and system design
+
 ## 🔧 Key Technologies
 
 - **AWS Bedrock**: Natural language to SQL translation
@@ -68,6 +76,7 @@ Large data files (>100MB) are stored separately:
 2. **ETL Pipeline Development**: Data transformation and loading
 3. **Interactive Analysis**: Jupyter-based data exploration
 4. **Knowledge Base Queries**: Natural language data querying
+5. **Incremental Data Processing**: Large-scale pipeline optimization with 95% cost reduction
 
 ## 🔗 Related Resources
 
@@ -75,6 +84,7 @@ Large data files (>100MB) are stored separately:
 - [Claude Setup Guide](claude-setup/claude-connection-guide.md)
 - [Parquet Analysis Tools](data-analysis/parquet-analysis/)
 - [Shipment Timeline Analysis](data-analysis/shipment-timeline/)
+- **[🎯 Incremental Processing Workflow](shipment-timeline-workflow/)** - Interactive visualization and implementation
 
 ---
 

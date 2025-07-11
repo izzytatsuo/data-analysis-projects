@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shipment Timeline Workflow - Interactive Visualization</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+        
+        .header p {
+            margin: 10px 0 0 0;
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .workflow-container {
+            padding: 40px;
+        }
+        
+        .stage {
+            margin-bottom: 40px;
+            padding: 30px;
+            border-radius: 10px;
+            border-left: 5px solid;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: #fafafa;
+        }
+        
+        .stage:hover {
+            transform: translateX(10px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        .stage.daily {
+            border-left-color: #4CAF50;
+            background: linear-gradient(135deg, #e8f5e8 0%, #f0f8f0 100%);
+        }
+        
+        .stage.incremental {
+            border-left-color: #2196F3;
+            background: linear-gradient(135deg, #e3f2fd 0%, #f0f7ff 100%);
+        }
+        
+        .stage.realtime {
+            border-left-color: #FF9800;
+            background: linear-gradient(135deg, #fff3e0 0%, #fff8f0 100%);
+        }
+        
+        .stage h2 {
+            margin: 0 0 15px 0;
+            font-size: 1.8em;
+            display: flex;
+            align-items: center;
+        }
+        
+        .stage-icon {
+            width: 40px;
+            height: 40px;
+            margin-right: 15px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.2em;
+        }
+        
+        .daily .stage-icon { background: #4CAF50; }
+        .incremental .stage-icon { background: #2196F3; }
+        .realtime .stage-icon { background: #FF9800; }
+        
+        .stage-details {
+            display: none;
+            margin-top: 20px;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .stage.active .stage-details {
+            display: block;
+        }
+        
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .metric {
+            text-align: center;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .metric-value {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        
+        .metric-label {
+            font-size: 0.9em;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+        
+        .code-block {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 15px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.9em;
+            overflow-x: auto;
+            margin: 15px 0;
+        }
+        
+        .flow-diagram {
+            text-align: center;
+            margin: 30px 0;
+        }
+        
+        .flow-step {
+            display: inline-block;
+            padding: 15px 25px;
+            margin: 0 10px 20px 0;
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 25px;
+            position: relative;
+            min-width: 120px;
+        }
+        
+        .flow-step::after {
+            content: '→';
+            position: absolute;
+            right: -25px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 1.5em;
+            color: #666;
+        }
+        
+        .flow-step:last-child::after {
+            display: none;
+        }
+        
+        .performance-comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin: 30px 0;
+        }
+        
+        .comparison-card {
+            padding: 25px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .traditional {
+            background: linear-gradient(135deg, #ffebee 0%, #fce4ec 100%);
+            border: 2px solid #f8bbd9;
+        }
+        
+        .incremental {
+            background: linear-gradient(135deg, #e8f5e8 0%, #f0f8f0 100%);
+            border: 2px solid #a5d6a7;
+        }
+        
+        .tab-container {
+            margin: 30px 0;
+        }
+        
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #e0e0e0;
+            margin-bottom: 20px;
+        }
+        
+        .tab {
+            padding: 12px 24px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+        
+        .tab:hover {
+            background: #f5f5f5;
+        }
+        
+        .tab.active {
+            border-bottom-color: #2196F3;
+            color: #2196F3;
+            font-weight: bold;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        @media (max-width: 768px) {
+            .performance-comparison {
+                grid-template-columns: 1fr;
+            }
+            
+            .metrics {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .flow-step {
+                display: block;
+                margin: 10px 0;
+            }
+            
+            .flow-step::after {
+                content: '↓';
+                right: auto;
+                left: 50%;
+                top: 100%;
+                transform: translateX(-50%);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Shipment Timeline Workflow</h1>
+            <p>Interactive Visualization of Incremental Data Processing Pipeline</p>
+        </div>
+        
+        <div class="workflow-container">
+            <!-- Overview -->
+            <div class="stage daily" onclick="toggleStage(this)">
+                <h2>
+                    <div class="stage-icon">🕛</div>
+                    Stage 1: Daily Base Process
+                </h2>
+                <p><strong>Midnight UTC:</strong> Complete processing of last 10 days with full window function computation</p>
+                
+                <div class="stage-details">
+                    <div class="flow-diagram">
+                        <div class="flow-step">Extract 10 Days</div>
+                        <div class="flow-step">Enrich Data</div>
+                        <div class="flow-step">Window Functions</div>
+                        <div class="flow-step">Store Base</div>
+                        <div class="flow-step">Update Checkpoint</div>
+                    </div>
+                    
+                    <div class="metrics">
+                        <div class="metric">
+                            <div class="metric-value">4-6 hrs</div>
+                            <div class="metric-label">Processing Time</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">100%</div>
+                            <div class="metric-label">Dataset Coverage</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">$50-100</div>
+                            <div class="metric-label">Compute Cost</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">Once/Day</div>
+                            <div class="metric-label">Frequency</div>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-container">
+                        <div class="tabs">
+                            <div class="tab active" onclick="showTab(event, 'daily-sql')">SQL Logic</div>
+                            <div class="tab" onclick="showTab(event, 'daily-benefits')">Benefits</div>
+                            <div class="tab" onclick="showTab(event, 'daily-schedule')">Scheduling</div>
+                        </div>
+                        
+                        <div class="tab-content active" id="daily-sql">
+                            <div class="code-block">
+-- Daily Base Process Key Steps
+WITH base_data AS (
+    SELECT * FROM shipment_events 
+    WHERE event_timestamp >= CURRENT_DATE - INTERVAL '10 days'
+),
+timeline_with_windows AS (
+    SELECT *,
+        ROW_NUMBER() OVER (
+            PARTITION BY shipment_id 
+            ORDER BY event_timestamp
+        ) as event_sequence,
+        LAG(event_timestamp) OVER (...) as prev_event_time,
+        -- Complex window function computations
+    FROM base_data
+)
+SELECT * FROM timeline_with_windows;
+                            </div>
+                        </div>
+                        
+                        <div class="tab-content" id="daily-benefits">
+                            <ul>
+                                <li><strong>Complete Coverage:</strong> Processes all data for the time window</li>
+                                <li><strong>Accurate Windows:</strong> Full window function computation with complete context</li>
+                                <li><strong>Clean Baseline:</strong> Provides reliable foundation for incremental updates</li>
+                                <li><strong>Historical Analysis:</strong> Enables trend analysis across full dataset</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="tab-content" id="daily-schedule">
+                            <p><strong>Recommended Scheduling:</strong></p>
+                            <ul>
+                                <li>Run at 00:00 UTC when data activity is lowest</li>
+                                <li>Allow 4-6 hour processing window</li>
+                                <li>Set up monitoring and alerting for failures</li>
+                                <li>Configure automatic retry with exponential backoff</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Incremental Stage -->
+            <div class="stage incremental" onclick="toggleStage(this)">
+                <h2>
+                    <div class="stage-icon">⚡</div>
+                    Stage 2: Incremental Updates
+                </h2>
+                <p><strong>Event-Driven:</strong> Process only new data since last checkpoint with minimal computation</p>
+                
+                <div class="stage-details">
+                    <div class="flow-diagram">
+                        <div class="flow-step">S3 Event</div>
+                        <div class="flow-step">Get Checkpoint</div>
+                        <div class="flow-step">Extract New Events</div>
+                        <div class="flow-step">Context Merge</div>
+                        <div class="flow-step">Append Timeline</div>
+                    </div>
+                    
+                    <div class="metrics">
+                        <div class="metric">
+                            <div class="metric-value">2-5 min</div>
+                            <div class="metric-label">Processing Time</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">1-5%</div>
+                            <div class="metric-label">Dataset Coverage</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">$2-5</div>
+                            <div class="metric-label">Compute Cost</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">Real-time</div>
+                            <div class="metric-label">Frequency</div>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-container">
+                        <div class="tabs">
+                            <div class="tab active" onclick="showTab(event, 'inc-sql')">SQL Logic</div>
+                            <div class="tab" onclick="showTab(event, 'inc-benefits')">Benefits</div>
+                            <div class="tab" onclick="showTab(event, 'inc-triggers')">Event Triggers</div>
+                        </div>
+                        
+                        <div class="tab-content active" id="inc-sql">
+                            <div class="code-block">
+-- Incremental Update Key Steps
+WITH checkpoint AS (
+    SELECT last_processed_timestamp 
+    FROM processing_checkpoints 
+    WHERE checkpoint_id = 'shipment_timeline'
+),
+new_events AS (
+    SELECT * FROM shipment_events 
+    WHERE event_timestamp > (SELECT last_processed_timestamp FROM checkpoint)
+),
+existing_context AS (
+    SELECT shipment_id, MAX(event_sequence) as last_sequence
+    FROM shipment_timeline_base
+    WHERE shipment_id IN (SELECT DISTINCT shipment_id FROM new_events)
+    GROUP BY shipment_id
+)
+-- Continue sequence and append new events
+SELECT new_events.*, last_sequence + ROW_NUMBER() OVER (...)
+FROM new_events JOIN existing_context ...;
+                            </div>
+                        </div>
+                        
+                        <div class="tab-content" id="inc-benefits">
+                            <ul>
+                                <li><strong>Performance:</strong> 95% reduction in processing time</li>
+                                <li><strong>Cost Efficiency:</strong> Process only new data, not entire dataset</li>
+                                <li><strong>Real-time:</strong> Near-instant data availability</li>
+                                <li><strong>Scalability:</strong> Handles growing data volumes efficiently</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="tab-content" id="inc-triggers">
+                            <p><strong>S3 Event Configuration:</strong></p>
+                            <div class="code-block">
+{
+  "Rules": [{
+    "Id": "ShipmentDataTrigger",
+    "Status": "Enabled",
+    "Filter": {
+      "Key": {
+        "FilterRules": [{
+          "Name": "prefix",
+          "Value": "shipment-events/"
+        }]
+      }
+    },
+    "LambdaConfiguration": {
+      "LambdaFunctionArn": "arn:aws:lambda:...:function:shipment-timeline-processor"
+    }
+  }]
+}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Real-time View -->
+            <div class="stage realtime" onclick="toggleStage(this)">
+                <h2>
+                    <div class="stage-icon">🎯</div>
+                    Stage 3: Real-time Timeline View
+                </h2>
+                <p><strong>Query Interface:</strong> Combine base + incremental data for current timeline state</p>
+                
+                <div class="stage-details">
+                    <div class="flow-diagram">
+                        <div class="flow-step">Base Timeline</div>
+                        <div class="flow-step">Incremental Data</div>
+                        <div class="flow-step">Union & Correct</div>
+                        <div class="flow-step">Materialized View</div>
+                        <div class="flow-step">User Queries</div>
+                    </div>
+                    
+                    <div class="metrics">
+                        <div class="metric">
+                            <div class="metric-value">5-10 min</div>
+                            <div class="metric-label">Data Freshness</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">Sub-second</div>
+                            <div class="metric-label">Query Response</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">100%</div>
+                            <div class="metric-label">Data Accuracy</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">24/7</div>
+                            <div class="metric-label">Availability</div>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-container">
+                        <div class="tabs">
+                            <div class="tab active" onclick="showTab(event, 'view-sql')">View Logic</div>
+                            <div class="tab" onclick="showTab(event, 'view-usage')">Usage Examples</div>
+                            <div class="tab" onclick="showTab(event, 'view-performance')">Performance</div>
+                        </div>
+                        
+                        <div class="tab-content active" id="view-sql">
+                            <div class="code-block">
+-- Real-time View Combination
+CREATE MATERIALIZED VIEW shipment_timeline_realtime AS
+WITH combined_timeline AS (
+    SELECT *, 'base' as source FROM shipment_timeline_base
+    UNION ALL
+    SELECT *, 'incremental' as source FROM shipment_timeline_incremental
+),
+corrected_timeline AS (
+    SELECT *,
+        ROW_NUMBER() OVER (
+            PARTITION BY shipment_id 
+            ORDER BY event_timestamp
+        ) as corrected_sequence
+    FROM combined_timeline
+)
+SELECT * FROM corrected_timeline;
+                            </div>
+                        </div>
+                        
+                        <div class="tab-content" id="view-usage">
+                            <div class="code-block">
+-- Get current status of all active shipments
+SELECT shipment_id, status, location_name, progress_percentage
+FROM shipment_timeline_realtime 
+WHERE is_latest_event = TRUE AND NOT is_delivered;
+
+-- Analyze delivery performance
+SELECT AVG(total_shipment_hours) as avg_delivery_time
+FROM shipment_timeline_realtime 
+WHERE is_delivered = TRUE 
+AND delivery_timestamp >= CURRENT_DATE - INTERVAL '7 days';
+
+-- Find delayed shipments
+SELECT * FROM shipment_timeline_realtime
+WHERE event_timing_status = 'delayed' AND NOT is_delivered;
+                            </div>
+                        </div>
+                        
+                        <div class="tab-content" id="view-performance">
+                            <ul>
+                                <li><strong>Indexing:</strong> Strategic indexes on shipment_id, timestamp, status</li>
+                                <li><strong>Materialization:</strong> Pre-computed joins for fast query response</li>
+                                <li><strong>Partitioning:</strong> Time-based partitioning for large datasets</li>
+                                <li><strong>Refresh Strategy:</strong> Incremental refresh after each update</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Performance Comparison -->
+            <div style="margin-top: 50px;">
+                <h2 style="text-align: center; margin-bottom: 30px;">Performance Comparison</h2>
+                <div class="performance-comparison">
+                    <div class="comparison-card traditional">
+                        <h3>Traditional Approach</h3>
+                        <div class="metrics">
+                            <div class="metric">
+                                <div class="metric-value">6 hrs</div>
+                                <div class="metric-label">Daily Processing</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">4 hrs</div>
+                                <div class="metric-label">Each Intraday Update</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">$400</div>
+                                <div class="metric-label">Daily Compute Cost</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">4-6 hrs</div>
+                                <div class="metric-label">Data Lag</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="comparison-card incremental">
+                        <h3>Incremental Approach</h3>
+                        <div class="metrics">
+                            <div class="metric">
+                                <div class="metric-value">30 min</div>
+                                <div class="metric-label">Daily Processing</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">5 min</div>
+                                <div class="metric-label">Each Intraday Update</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">$50</div>
+                                <div class="metric-label">Daily Compute Cost</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">5-10 min</div>
+                                <div class="metric-label">Data Lag</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function toggleStage(element) {
+            // Close all other stages
+            const stages = document.querySelectorAll('.stage');
+            stages.forEach(stage => {
+                if (stage !== element) {
+                    stage.classList.remove('active');
+                }
+            });
+            
+            // Toggle current stage
+            element.classList.toggle('active');
+        }
+        
+        function showTab(event, tabId) {
+            // Get the parent tab container
+            const tabContainer = event.target.closest('.tab-container');
+            
+            // Hide all tab contents in this container
+            const tabContents = tabContainer.querySelectorAll('.tab-content');
+            tabContents.forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Remove active class from all tabs in this container
+            const tabs = tabContainer.querySelectorAll('.tab');
+            tabs.forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab content
+            document.getElementById(tabId).classList.add('active');
+            
+            // Add active class to clicked tab
+            event.target.classList.add('active');
+        }
+        
+        // Auto-expand first stage on load
+        document.addEventListener('DOMContentLoaded', function() {
+            const firstStage = document.querySelector('.stage');
+            firstStage.classList.add('active');
+        });
+    </script>
+</body>
+</html>
