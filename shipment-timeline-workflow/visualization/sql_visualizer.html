@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQL Query Visualizer - Shipment Timeline</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql-formatter/4.0.2/sql-formatter.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .query-selector {
+            padding: 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .query-tabs {
+            display: inline-block;
+            margin-right: 20px;
+            padding: 10px 20px;
+            background: white;
+            border: 2px solid #e9ecef;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .query-tabs:hover {
+            background: #e9ecef;
+        }
+        
+        .query-tabs.active {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        
+        .visualization-container {
+            display: flex;
+            height: 80vh;
+        }
+        
+        .query-panel {
+            width: 40%;
+            border-right: 1px solid #dee2e6;
+            overflow-y: auto;
+        }
+        
+        .visual-panel {
+            width: 60%;
+            overflow-y: auto;
+        }
+        
+        .sql-editor {
+            height: 300px;
+            border: 1px solid #dee2e6;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 14px;
+            padding: 15px;
+            background: #f8f9fa;
+            overflow: auto;
+            white-space: pre;
+            line-height: 1.5;
+        }
+        
+        .table-diagram {
+            padding: 20px;
+        }
+        
+        .table-box {
+            border: 2px solid #007bff;
+            border-radius: 8px;
+            margin: 15px 0;
+            background: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .table-header {
+            background: #007bff;
+            color: white;
+            padding: 12px 15px;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        
+        .table-field {
+            padding: 8px 15px;
+            border-bottom: 1px solid #f1f3f4;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .table-field:last-child {
+            border-bottom: none;
+        }
+        
+        .field-name {
+            font-weight: 500;
+            color: #495057;
+        }
+        
+        .field-type {
+            color: #6c757d;
+            font-size: 12px;
+            background: #f8f9fa;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+        
+        .flow-diagram {
+            padding: 20px;
+        }
+        
+        .flow-step {
+            display: flex;
+            align-items: center;
+            margin: 20px 0;
+            padding: 15px;
+            background: white;
+            border-left: 4px solid #28a745;
+            border-radius: 0 8px 8px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .step-number {
+            width: 30px;
+            height: 30px;
+            background: #28a745;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-right: 15px;
+        }
+        
+        .step-content {
+            flex: 1;
+        }
+        
+        .step-title {
+            font-weight: bold;
+            color: #495057;
+            margin-bottom: 5px;
+        }
+        
+        .step-description {
+            color: #6c757d;
+            font-size: 14px;
+        }
+        
+        .data-flow {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: 30px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .data-box {
+            padding: 15px;
+            background: white;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            text-align: center;
+            min-width: 120px;
+        }
+        
+        .data-arrow {
+            font-size: 24px;
+            color: #007bff;
+            margin: 0 15px;
+        }
+        
+        .highlighted {
+            background-color: #fff3cd !important;
+            border-color: #ffeaa7 !important;
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .metric-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .metric-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        
+        .metric-label {
+            color: #6c757d;
+            font-size: 14px;
+        }
+        
+        .controls {
+            padding: 15px 20px;
+            background: #f8f9fa;
+            border-top: 1px solid #dee2e6;
+        }
+        
+        .control-btn {
+            padding: 8px 16px;
+            margin-right: 10px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .control-btn:hover {
+            background: #0056b3;
+        }
+        
+        .control-btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>SQL Query Visualizer</h1>
+            <p>Interactive exploration of shipment timeline queries and data flow</p>
+        </div>
+        
+        <div class="query-selector">
+            <div class="query-tabs active" onclick="showQuery('daily_base')">Daily Base Process</div>
+            <div class="query-tabs" onclick="showQuery('incremental')">Incremental Update</div>
+            <div class="query-tabs" onclick="showQuery('realtime_view')">Real-time View</div>
+            <div class="query-tabs" onclick="showQuery('performance')">Performance Analysis</div>
+        </div>
+        
+        <div class="visualization-container">
+            <div class="query-panel">
+                <div id="sql-content">
+                    <!-- SQL content will be inserted here -->
+                </div>
+                <div class="controls">
+                    <button class="control-btn" onclick="executeStep()" id="execute-btn">Execute Step</button>
+                    <button class="control-btn" onclick="resetVisualization()">Reset</button>
+                    <button class="control-btn" onclick="exportDiagram()">Export</button>
+                </div>
+            </div>
+            
+            <div class="visual-panel">
+                <div id="visualization-content">
+                    <!-- Visualization content will be inserted here -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Query definitions with SQL and visualization data
+        const queries = {
+            daily_base: {
+                title: "Daily Base Process",
+                sql: `-- Daily Base Process for Shipment Timeline
+-- Runs at 00:00 UTC daily
+
+-- Step 1: Extract 10 days of shipment events
+WITH base_data AS (
+    SELECT 
+        shipment_id,
+        event_timestamp,
+        event_type,
+        location_id,
+        status,
+        package_id
+    FROM shipment_events 
+    WHERE event_timestamp >= CURRENT_DATE - INTERVAL '10 days'
+        AND event_timestamp < CURRENT_DATE
+),
+
+-- Step 2: Enrich with location and package details
+enriched_data AS (
+    SELECT 
+        bd.*,
+        loc.location_name,
+        loc.region,
+        pkg.package_weight
+    FROM base_data bd
+    LEFT JOIN locations loc ON bd.location_id = loc.location_id
+    LEFT JOIN packages pkg ON bd.package_id = pkg.package_id
+),
+
+-- Step 3: Compute expensive window functions
+timeline_with_windows AS (
+    SELECT *,
+        ROW_NUMBER() OVER (
+            PARTITION BY shipment_id 
+            ORDER BY event_timestamp
+        ) as event_sequence,
+        
+        LAG(event_timestamp) OVER (
+            PARTITION BY shipment_id 
+            ORDER BY event_timestamp
+        ) as prev_event_timestamp,
+        
+        -- Time between events
+        event_timestamp - LAG(event_timestamp) OVER (
+            PARTITION BY shipment_id 
+            ORDER BY event_timestamp
+        ) as time_since_prev_event
+        
+    FROM enriched_data
+)
+
+-- Step 4: Store base timeline
+INSERT INTO shipment_timeline_base
+SELECT * FROM timeline_with_windows;`,
+                
+                tables: [
+                    {
+                        name: "shipment_events",
+                        type: "source",
+                        fields: [
+                            {name: "shipment_id", type: "VARCHAR(50)", key: true},
+                            {name: "event_timestamp", type: "TIMESTAMP"},
+                            {name: "event_type", type: "VARCHAR(50)"},
+                            {name: "location_id", type: "VARCHAR(50)"},
+                            {name: "status", type: "VARCHAR(50)"},
+                            {name: "package_id", type: "VARCHAR(50)"}
+                        ]
+                    },
+                    {
+                        name: "locations",
+                        type: "reference",
+                        fields: [
+                            {name: "location_id", type: "VARCHAR(50)", key: true},
+                            {name: "location_name", type: "VARCHAR(200)"},
+                            {name: "region", type: "VARCHAR(50)"}
+                        ]
+                    },
+                    {
+                        name: "shipment_timeline_base",
+                        type: "output",
+                        fields: [
+                            {name: "shipment_id", type: "VARCHAR(50)", key: true},
+                            {name: "event_timestamp", type: "TIMESTAMP"},
+                            {name: "event_sequence", type: "INTEGER"},
+                            {name: "prev_event_timestamp", type: "TIMESTAMP"},
+                            {name: "time_since_prev_event", type: "INTERVAL"}
+                        ]
+                    }
+                ],
+                
+                steps: [
+                    {title: "Extract Base Data", description: "Query last 10 days of shipment events", duration: "30s"},
+                    {title: "Enrich Data", description: "Join with locations and packages", duration: "45s"},
+                    {title: "Window Functions", description: "Calculate sequences and time differences", duration: "15min"},
+                    {title: "Store Results", description: "Insert into base timeline table", duration: "2min"}
+                ],
+                
+                metrics: [
+                    {label: "Records Processed", value: "2.5M"},
+                    {label: "Processing Time", value: "18 min"},
+                    {label: "Compute Cost", value: "$12"},
+                    {label: "Output Size", value: "850MB"}
+                ]
+            },
+            
+            incremental: {
+                title: "Incremental Update Process",
+                sql: `-- Incremental Update Process
+-- Triggered by S3 events
+
+-- Step 1: Get checkpoint
+WITH checkpoint AS (
+    SELECT last_processed_timestamp 
+    FROM processing_checkpoints 
+    WHERE checkpoint_id = 'shipment_timeline'
+),
+
+-- Step 2: Extract only NEW events
+new_events AS (
+    SELECT * FROM shipment_events 
+    WHERE event_timestamp > (
+        SELECT last_processed_timestamp FROM checkpoint
+    )
+),
+
+-- Step 3: Get context from base timeline
+existing_context AS (
+    SELECT 
+        ne.shipment_id,
+        MAX(stb.event_sequence) as last_sequence,
+        MAX(stb.event_timestamp) as last_timestamp
+    FROM new_events ne
+    JOIN shipment_timeline_base stb ON ne.shipment_id = stb.shipment_id
+    GROUP BY ne.shipment_id
+),
+
+-- Step 4: Process with context
+incremental_timeline AS (
+    SELECT 
+        ne.*,
+        COALESCE(ec.last_sequence, 0) + 
+        ROW_NUMBER() OVER (
+            PARTITION BY ne.shipment_id 
+            ORDER BY ne.event_timestamp
+        ) as event_sequence
+    FROM new_events ne
+    LEFT JOIN existing_context ec ON ne.shipment_id = ec.shipment_id
+)
+
+-- Step 5: Append to incremental table
+INSERT INTO shipment_timeline_incremental
+SELECT * FROM incremental_timeline;`,
+                
+                tables: [
+                    {
+                        name: "processing_checkpoints",
+                        type: "control",
+                        fields: [
+                            {name: "checkpoint_id", type: "VARCHAR(50)", key: true},
+                            {name: "last_processed_timestamp", type: "TIMESTAMP"}
+                        ]
+                    },
+                    {
+                        name: "shipment_events",
+                        type: "source", 
+                        fields: [
+                            {name: "shipment_id", type: "VARCHAR(50)"},
+                            {name: "event_timestamp", type: "TIMESTAMP"},
+                            {name: "event_type", type: "VARCHAR(50)"}
+                        ]
+                    },
+                    {
+                        name: "shipment_timeline_incremental",
+                        type: "output",
+                        fields: [
+                            {name: "shipment_id", type: "VARCHAR(50)"},
+                            {name: "event_sequence", type: "INTEGER"},
+                            {name: "incremental_batch_id", type: "UUID"}
+                        ]
+                    }
+                ],
+                
+                steps: [
+                    {title: "Get Checkpoint", description: "Find last processed timestamp", duration: "0.1s"},
+                    {title: "Extract New Events", description: "Query events since checkpoint", duration: "2s"},
+                    {title: "Get Context", description: "Retrieve existing shipment state", duration: "1s"},
+                    {title: "Process & Append", description: "Calculate and store new events", duration: "30s"}
+                ],
+                
+                metrics: [
+                    {label: "New Events", value: "1,250"},
+                    {label: "Processing Time", value: "45 sec"},
+                    {label: "Compute Cost", value: "$0.50"},
+                    {label: "Data Lag", value: "2 min"}
+                ]
+            },
+            
+            realtime_view: {
+                title: "Real-time Timeline View",
+                sql: `-- Real-time View: Combine Base + Incremental
+CREATE MATERIALIZED VIEW shipment_timeline_realtime AS
+
+WITH combined_timeline AS (
+    -- Base timeline (historical data)
+    SELECT *, 'base' as source_type
+    FROM shipment_timeline_base
+    
+    UNION ALL
+    
+    -- Incremental updates (recent data)
+    SELECT *, 'incremental' as source_type  
+    FROM shipment_timeline_incremental
+),
+
+corrected_timeline AS (
+    SELECT *,
+        -- Recalculate sequence across boundary
+        ROW_NUMBER() OVER (
+            PARTITION BY shipment_id 
+            ORDER BY event_timestamp
+        ) as corrected_sequence,
+        
+        -- Fix next event timestamp
+        LEAD(event_timestamp) OVER (
+            PARTITION BY shipment_id 
+            ORDER BY event_timestamp
+        ) as next_event_timestamp
+        
+    FROM combined_timeline
+)
+
+SELECT * FROM corrected_timeline
+ORDER BY shipment_id, event_timestamp;`,
+                
+                tables: [
+                    {
+                        name: "shipment_timeline_base",
+                        type: "input",
+                        fields: [
+                            {name: "shipment_id", type: "VARCHAR(50)"},
+                            {name: "event_timestamp", type: "TIMESTAMP"},
+                            {name: "event_sequence", type: "INTEGER"}
+                        ]
+                    },
+                    {
+                        name: "shipment_timeline_incremental", 
+                        type: "input",
+                        fields: [
+                            {name: "shipment_id", type: "VARCHAR(50)"},
+                            {name: "event_timestamp", type: "TIMESTAMP"},
+                            {name: "event_sequence", type: "INTEGER"}
+                        ]
+                    },
+                    {
+                        name: "shipment_timeline_realtime",
+                        type: "output",
+                        fields: [
+                            {name: "shipment_id", type: "VARCHAR(50)"},
+                            {name: "corrected_sequence", type: "INTEGER"},
+                            {name: "source_type", type: "VARCHAR(20)"},
+                            {name: "next_event_timestamp", type: "TIMESTAMP"}
+                        ]
+                    }
+                ],
+                
+                steps: [
+                    {title: "Union Data", description: "Combine base and incremental tables", duration: "1s"},
+                    {title: "Correct Sequences", description: "Recalculate event ordering", duration: "3s"},
+                    {title: "Fix Boundaries", description: "Repair cross-table relationships", duration: "2s"},
+                    {title: "Materialize View", description: "Create optimized query structure", duration: "5s"}
+                ],
+                
+                metrics: [
+                    {label: "Total Records", value: "2.51M"},
+                    {label: "View Refresh", value: "11 sec"},
+                    {label: "Query Time", value: "< 1 sec"},
+                    {label: "Data Freshness", value: "3 min"}
+                ]
+            }
+        };
+        
+        let currentQuery = 'daily_base';
+        let currentStep = 0;
+        
+        function showQuery(queryName) {
+            currentQuery = queryName;
+            currentStep = 0;
+            
+            // Update tab selection
+            document.querySelectorAll('.query-tabs').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // Update content
+            updateSQLContent();
+            updateVisualization();
+        }
+        
+        function updateSQLContent() {
+            const query = queries[currentQuery];
+            const sqlContent = document.getElementById('sql-content');
+            
+            sqlContent.innerHTML = `
+                <h3>${query.title}</h3>
+                <div class="sql-editor">${query.sql}</div>
+                <div style="padding: 15px;">
+                    <h4>Processing Steps:</h4>
+                    <div class="metrics-grid">
+                        ${query.steps.map((step, index) => `
+                            <div class="flow-step ${index <= currentStep ? 'highlighted' : ''}">
+                                <div class="step-number">${index + 1}</div>
+                                <div class="step-content">
+                                    <div class="step-title">${step.title}</div>
+                                    <div class="step-description">${step.description} (${step.duration})</div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+        
+        function updateVisualization() {
+            const query = queries[currentQuery];
+            const visualContent = document.getElementById('visualization-content');
+            
+            const tablesHtml = query.tables.map(table => {
+                const typeColors = {
+                    source: '#28a745',
+                    reference: '#ffc107', 
+                    control: '#6c757d',
+                    input: '#17a2b8',
+                    output: '#007bff'
+                };
+                
+                return `
+                    <div class="table-box" style="border-color: ${typeColors[table.type]}">
+                        <div class="table-header" style="background: ${typeColors[table.type]}">
+                            ${table.name} (${table.type})
+                        </div>
+                        ${table.fields.map(field => `
+                            <div class="table-field">
+                                <span class="field-name">${field.name} ${field.key ? '🔑' : ''}</span>
+                                <span class="field-type">${field.type}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }).join('');
+            
+            const metricsHtml = `
+                <div class="metrics-grid">
+                    ${query.metrics.map(metric => `
+                        <div class="metric-card">
+                            <div class="metric-value">${metric.value}</div>
+                            <div class="metric-label">${metric.label}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            
+            visualContent.innerHTML = `
+                <div class="table-diagram">
+                    <h3>Data Flow & Tables</h3>
+                    ${tablesHtml}
+                    
+                    <h3>Performance Metrics</h3>
+                    ${metricsHtml}
+                </div>
+            `;
+        }
+        
+        function executeStep() {
+            const query = queries[currentQuery];
+            if (currentStep < query.steps.length - 1) {
+                currentStep++;
+                updateSQLContent();
+                
+                // Highlight corresponding table
+                setTimeout(() => {
+                    const tables = document.querySelectorAll('.table-box');
+                    if (tables[currentStep]) {
+                        tables[currentStep].classList.add('highlighted');
+                        setTimeout(() => {
+                            tables[currentStep].classList.remove('highlighted');
+                        }, 2000);
+                    }
+                }, 100);
+            }
+            
+            if (currentStep >= query.steps.length - 1) {
+                document.getElementById('execute-btn').disabled = true;
+                document.getElementById('execute-btn').textContent = 'Complete';
+            }
+        }
+        
+        function resetVisualization() {
+            currentStep = 0;
+            document.getElementById('execute-btn').disabled = false;
+            document.getElementById('execute-btn').textContent = 'Execute Step';
+            updateSQLContent();
+            updateVisualization();
+        }
+        
+        function exportDiagram() {
+            // Simple export functionality
+            const content = document.querySelector('.container').outerHTML;
+            const blob = new Blob([`
+                <!DOCTYPE html>
+                <html><head><meta charset="UTF-8"><title>SQL Visualization Export</title></head>
+                <body>${content}</body></html>
+            `], {type: 'text/html'});
+            
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `sql-visualization-${currentQuery}.html`;
+            a.click();
+        }
+        
+        // Initialize
+        updateSQLContent();
+        updateVisualization();
+    </script>
+</body>
+</html>

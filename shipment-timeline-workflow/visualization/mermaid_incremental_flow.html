@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Incremental Update Process</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .diagram-container {
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .controls {
+            padding: 20px;
+            background: #f8f9fa;
+            border-top: 1px solid #dee2e6;
+            text-align: center;
+        }
+        
+        .control-btn {
+            padding: 10px 20px;
+            margin: 0 10px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .control-btn:hover {
+            background: #0056b3;
+            transform: translateY(-2px);
+        }
+        
+        #diagram {
+            min-height: 400px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            background: white;
+        }
+        
+        .info-panel {
+            background: #f8f9fa;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Incremental Update Process</h1>
+            <p>Interactive SQL Workflow Visualization</p>
+        </div>
+        
+        <div class="diagram-container">
+            <div id="diagram">
+                <pre class="mermaid">
+
+flowchart TD
+    A[📁 S3 Event Trigger] --> B[⚡ Lambda Function]
+    B --> C[🔍 Get Checkpoint]
+    C --> D{Base Available?}
+    D -->|❌ No| E[❌ Error: Run Daily Base First]
+    D -->|✅ Yes| F[📊 Extract New Events]
+    
+    F --> G{New Events Found?}
+    G -->|❌ No| H[ℹ️ No Processing Needed]
+    G -->|✅ Yes| I[🧩 Get Existing Context]
+    
+    I --> J[🔧 Process New Events]
+    J --> K[Continue Sequences]
+    J --> L[Calculate Time Deltas]
+    J --> M[Update Metrics]
+    
+    K --> N[📝 Append to Incremental]
+    L --> N
+    M --> N
+    
+    N --> O[🔄 Refresh Real-time View]
+    O --> P[✅ Update Checkpoint]
+    P --> Q[📊 Log Metrics]
+    Q --> R[🎯 Success]
+    
+    %% Performance indicators
+    S[⏱️ 2-5 minutes] -.-> J
+    T[💰 $2-5 cost] -.-> J
+    U[📈 1-5% dataset] -.-> F
+    
+    %% Styling
+    classDef trigger fill:#e3f2fd
+    classDef process fill:#f3e5f5
+    classDef decision fill:#fff3e0
+    classDef storage fill:#e8f5e8
+    classDef error fill:#ffebee
+    classDef metric fill:#fafafa
+    
+    class A,B trigger
+    class C,F,I,J,K,L,M,O,Q process
+    class D,G decision
+    class N,P storage
+    class E error
+    class S,T,U metric
+
+                </pre>
+            </div>
+            
+            <div class="info-panel">
+                <h3>Diagram Information</h3>
+                <p>This interactive diagram shows the incremental flow for the shipment timeline workflow. 
+                Click on elements to explore details, or use the controls below to modify the view.</p>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button class="control-btn" onclick="zoomIn()">🔍 Zoom In</button>
+            <button class="control-btn" onclick="zoomOut()">🔍 Zoom Out</button>
+            <button class="control-btn" onclick="resetZoom()">🔄 Reset</button>
+            <button class="control-btn" onclick="exportSVG()">💾 Export SVG</button>
+            <button class="control-btn" onclick="exportPNG()">📷 Export PNG</button>
+        </div>
+    </div>
+    
+    <script>
+        // Initialize Mermaid
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'default',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true,
+                curve: 'basis'
+            },
+            er: {
+                useMaxWidth: true
+            }
+        });
+        
+        let currentZoom = 1;
+        
+        function zoomIn() {
+            currentZoom += 0.2;
+            document.getElementById('diagram').style.transform = `scale(${currentZoom})`;
+        }
+        
+        function zoomOut() {
+            currentZoom = Math.max(0.2, currentZoom - 0.2);
+            document.getElementById('diagram').style.transform = `scale(${currentZoom})`;
+        }
+        
+        function resetZoom() {
+            currentZoom = 1;
+            document.getElementById('diagram').style.transform = 'scale(1)';
+        }
+        
+        function exportSVG() {
+            const svg = document.querySelector('#diagram svg');
+            if (svg) {
+                const svgData = new XMLSerializer().serializeToString(svg);
+                const blob = new Blob([svgData], {type: 'image/svg+xml'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'incremental_flow_diagram.svg';
+                a.click();
+            }
+        }
+        
+        function exportPNG() {
+            const svg = document.querySelector('#diagram svg');
+            if (svg) {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+                const svgData = new XMLSerializer().serializeToString(svg);
+                const blob = new Blob([svgData], {type: 'image/svg+xml'});
+                const url = URL.createObjectURL(blob);
+                
+                img.onload = function() {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.fillStyle = 'white';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0);
+                    
+                    canvas.toBlob(function(blob) {
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'incremental_flow_diagram.png';
+                        a.click();
+                    });
+                };
+                img.src = url;
+            }
+        }
+    </script>
+</body>
+</html>
